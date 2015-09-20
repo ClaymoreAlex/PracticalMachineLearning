@@ -1,0 +1,164 @@
+---
+title: "Practical Machine Learning"
+author: "Terry Alexander"
+date: "Saturday, September 19, 2015"
+output: html_document
+
+---
+
+**Project Overview**  
+
+Fitness trackers like Fitbit, Jawbone, Misfit have become popular with exercise and life style enthusiasts to count calories, steps, pounds, heartbeats per minute, and hours of sleep per day. Users of these devices regularly track their activity levels but do not generally assess how well the quality of their exercise.  
+
+In this experiment six participants were asked to perform one set of ten repetitions of bicep curls correctly and incorrectly in five different ways.  Data were collected on five measures including measures from accelerometers on the belt, forearm, arm, and dumbell of the participants. 
+
+The output variable (classe) is identified by the following codes and descriptions.  
+
+-Class A - exactly according to the specification  
+-Class B - throwing the elbows to the front  
+-Class C - lifting the dumbbell only halfway  
+-Class D - lowering the dumbbell only halfway  
+-Class E - throwing the hips to the front  
+
+(Source: http://groupware.les.inf.puc-rio.br/har#ixzz3mEAnn8Ve)  
+
+
+This analysis uses the Random Forest algorithm to predict the manner in which the participants engaged in the barbell lift exercise.
+
+
+**Data Processing**  
+
+*Load Initial Datasets*  
+Two datasets (original data available at  http://groupware.les.inf.puc-rio.br/har) were loaded to train and test the data.
+
+```{r}
+# libraries 
+library(caret)
+library(randomForest)
+
+# reads in training and test data
+pml_train_all <- read.csv("c:/terry/coursemat/pml-training.csv")
+pml_test_all  <- read.csv("c:/terry/coursemat/pml-testing.csv")
+
+```
+
+**Clean Data**  
+
+Since the summary variable information is contained in the base measurement data and these variables are, as a function of being summary data, are mainly null, they will be dropped.
+
+
+Two techniques to remove NA and variables with a near zero variance were used.  
+
+First, all variables with more than 90 percent of the rows with null values were eliminated.  Then near zero variance variables (characterized as having very few unique values relative to the number of samples and the ratio of the frequency of the most common value to the frequency of the second most common value is large) were removed.  The eliminated variables include those whose names begin with kurtosis, skewness, max, min, aplitude stddev, avg, var and total.  
+
+In addition, the first six variables contain information about the participant and the experiment were removed.  
+
+The original data contains these variables:  
+
+```{r}
+# initial dataset
+names(pml_train_all)
+
+```
+
+*Cleanup Procedures*  
+
+Data clean up procedures include:  
+
+```{r}
+# remove NA variables from training and test datasets
+varNA <- sapply(pml_train_all, function(x) mean(is.na(x))) > 0.90
+
+pml_train1 <- pml_train_all[, varNA == F]
+pml_test1  <- pml_test_all [, varNA == F]
+
+# remove near zero variables from training and test datasets
+nzv <- nearZeroVar(pml_train1)
+
+pml_train2 <- pml_train1[, -nzv]
+pml_test2  <- pml_test1 [, -nzv]
+
+# remove housekeeping variables
+pml_train <- pml_train2[, -(1:6)] 
+toTest    <- pml_test2 [, -(1:6)]
+
+```
+
+*Final Dataset*  
+
+The final dataset that will be used for the analysis includes these variables:
+
+```{r}
+# show variables used in analysis
+names(pml_train)
+
+```
+
+**Partition Training Data**  
+
+The training data was partitioned into two datasets, one for training and the second for prediction.  A seed was set to allow reproducibility of the results.  The training set contains seventy percent of the data, with the remaining thirty percent used for prediction.  
+
+```{r}
+# create samples - partition training data
+set.seed(1287)
+toTrainx  <- createDataPartition(y = pml_train$classe, p = 0.7, list = FALSE)
+toTrain   <- pml_train[ toTrainx, ]
+toPredict <- pml_train[-toTrainx, ]
+
+dim(toTrain)
+dim(toPredict)
+dim(toTest) 
+```
+
+**Evaluation**  
+
+The process used to determine the best selection of modeling technique was based on input from source matter experts as well as the analysis of the results of different methods used to obtain optimal output results.  For this analysis, a random forest algorithm was tried initally.  The results were satisfactory, so additional attempts with other methods were not required.  
+
+*Build Model*  
+
+A random forest machine learning algorithm was performed to predict how the participants performed the exercise (the classe variable in the dataset).  The training dataset (toTrain) was used to fit the original model.  
+
+```{r}
+# fit model random forest train data
+modFitB1 <- randomForest(classe ~. , data = toTrain)
+```
+
+*Cross Validation*  
+
+To cross-validate the results, the second dataset (toPredict) was used with the 'predict' option from the caret package.  A confusion matrix procedure was exectued to compare the training and predicted results.  
+
+
+```{r}
+# predict and compare with test
+predictB1 <- predict(modFitB1, toPredict, type = "class")
+
+# confusion matrix
+confusionMatrix(predictB1, toPredict$classe)
+
+```
+
+The confusion matrix shows that the majority of the predictions were accurate.  A visual inspection shows that most of the cells not on the diaganol are 0, with a few mismatches.  It appears that Class C - (lifting the dumbbell only halfway) has the largest number of errors when compared with the other class variables.  This can also be seen in its somewhat lower sensitivity and lower balanced accuracy rate in the statistics by class table.  The overall accuracy of the prediction is 99 percent.  
+
+*Expected OUt-of-sample Error*  
+
+The out-of-sample error can be found in the confusion matrix created above.  For ease of viewing, the predition part only is recreated here.  
+
+```{r}
+# out-of-sample error
+confusionMatrix(predictB1, toPredict$classe)[3]
+
+```
+
+The out-of-sample error is defined as 1 - accuracy.  For this analysis the error is 1 - .9941 or 0.6 percent.  
+
+*Test Set Predictions*  
+
+The final analysis was computed on a test set (toTest).  The prediction was against the original dataset's random forest results.  These results will be posted to the submission portion of the project assignment.  
+
+```{r}
+# for final
+predictB2 <- predict(modFitB1, toTest, type = "class")
+print(predictB2)
+
+```
+
